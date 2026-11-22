@@ -36,3 +36,26 @@ def formula(cat, data):
         rhs.append(f"{i}")
 
     return("Profit ~ " + " + ".join(rhs))
+
+def elimination(data, cat, numeric, alpha=0.05):
+    step = 0
+    while True:
+        model = smf.ols(formula(cat, numeric), data=data).fit()
+        pvals = sm.stats.anova_lm(model, typ=2)["PR(>F)"].drop("Residual")
+        worst = pvals.idmax()
+
+        if pvals[worst] <= alpha or (len(cat = 0) and len(numeric = 1)):
+            return model, numeric
+        if pvals[worst] <= alpha or (len(cat = 1) and len(numeric = 0)):
+            return model, alpha
+
+        name = worst.replace("C(", "").strip(")")
+        step += 1
+
+        print(f"Step {step}: removing {name} (p = {pvals[worst]:.4f}), "
+              f"adj R² = {model.rsquared_adj:.4f}")
+        if name in cat:
+            cat.remove(name)
+        else:
+            numeric.remove(name)
+
