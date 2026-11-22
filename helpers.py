@@ -1,5 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 
 def cleanData(df):
 
@@ -25,3 +27,12 @@ def cleanData(df):
 
     return clean
 
+def formula(cat, data):
+    # making a string formula for statsmodel imports
+    rhs = []
+    for i in cat:
+        rhs.append(f"C({i})")
+    for i in data:
+        rhs.append(f"{i}")
+
+    return("Profit ~ " + " + ".join(rhs))
