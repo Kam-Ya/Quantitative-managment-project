@@ -4,6 +4,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import numpy as np
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 def cleanData(df):
 
@@ -40,6 +41,9 @@ def formula(cat, data):
     return("Profit ~ " + " + ".join(rhs))
 
 def elimination(data, cat, numeric, alpha=0.05):
+    numeric = list(numeric)
+    cat = list(cat)
+
     step = 0
     while True:
         model = smf.ols(formula(cat, numeric), data=data).fit()
@@ -83,3 +87,14 @@ def model_table(model):
         for i, col in enumerate(X.columns) if col != 'Intercept'
     })
     return table
+
+def evaluate(y_true, y_pred, k):
+    n = len(y_true)
+    r2 = r2_score(y_true, y_pred)
+    adj = 1 - ((1 - r2) * (n - 1)) / (n - k - 1)
+    return {
+        'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'MAE': mean_absolute_error(y_true, y_pred),
+        'R²': r2,
+        'Adj R²': adj,
+    }

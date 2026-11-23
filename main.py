@@ -7,6 +7,12 @@ import scipy.stats as stats
 from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
 from statsmodels.stats.stattools import durbin_watson, jarque_bera
 import statsmodels.api as sm
+from sklearn.model_selection import GroupShuffleSplit
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # bad practice ik but for a solo dev not an issue? no one is is gonna be looking at this what am i saying
 from helpers import *
@@ -100,3 +106,31 @@ if multi.nunique() > 1:
     groups = [resid[idx].values for _, idx in multi.groupby(multi).groups.items()]
     F, p = stats.f_oneway(*groups)
     print(f"Residuals by Order_ID: F = {F:.2f}, p = {p:.4g}")
+
+
+
+features = numeric + categorical
+target = 'Profit'
+
+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+train_idx, test_idx = next(gss.split(df, groups=df['Order_ID']))
+train, test = df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+print(f"Train: {len(train)} | Test: {len(test)} ({len(test)/len(df):.1%})")
+
+pre = ColumnTransformer(
+    [('cat', OneHotEncoder(handle_unknown='ignore'), categorical)],
+    remainder='passthrough'          # numeric columns pass through unchanged
+)
+rf = Pipeline([
+    ('pre', pre),
+    ('model', RandomForestRegressor(n_estimators=300, n_jobs=-1, random_state=42)),
+])
+rf.fit(train[features], train[target])
+
+k_rf = rf.named_steps['pre'].transform(test[features]).shape[1]
+rf_test = evaluate(test[target], rf.predict(test[features]), k_rf)
+rf_train = evaluate(train[target], rf.predict(train[features]), k_rf)
+
+print(f"k (encoded features) = {k_rf}")
+print("Test: ", {m: round(v, 4) for m, v in rf_test.items()})
+print("Train:", {m: round(v, 4) for m, v in rf_train.items()})
