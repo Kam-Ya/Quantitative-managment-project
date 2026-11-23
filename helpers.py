@@ -2,6 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import numpy as np
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 def cleanData(df):
 
@@ -42,12 +44,13 @@ def elimination(data, cat, numeric, alpha=0.05):
     while True:
         model = smf.ols(formula(cat, numeric), data=data).fit()
         pvals = sm.stats.anova_lm(model, typ=2)["PR(>F)"].drop("Residual")
-        worst = pvals.idmax()
+        worst = pvals.idxmax()
 
-        if pvals[worst] <= alpha or (len(cat = 0) and len(numeric = 1)):
-            return model, numeric
-        if pvals[worst] <= alpha or (len(cat = 1) and len(numeric = 0)):
-            return model, alpha
+
+        left = len(cat) + len(numeric)
+
+        if pvals[worst] <= alpha or left == 1:
+            return model, cat + numeric
 
         name = worst.replace("C(", "").strip(")")
         step += 1
@@ -59,3 +62,24 @@ def elimination(data, cat, numeric, alpha=0.05):
         else:
             numeric.remove(name)
 
+def model_table(model):
+    X = pd.DataFrame(model.model.exog, columns=model.model.exog_names)
+    y = pd.Series(model.model.endog)
+
+    table = pd.DataFrame({
+        'B': model.params,
+        'Std Error': model.bse,
+        't': model.tvalues,
+        'p': model.pvalues,
+    })
+
+    # Standardized beta for every column (numeric and dummy)
+    table['Std Beta'] = table['B'] * X.std(ddof=1) / y.std(ddof=1)
+    table.loc['Intercept', 'Std Beta'] = np.nan
+
+    # VIF for every non-intercept column
+    table['VIF'] = pd.Series({
+        col: variance_inflation_factor(X.values, i)
+        for i, col in enumerate(X.columns) if col != 'Intercept'
+    })
+    return table
