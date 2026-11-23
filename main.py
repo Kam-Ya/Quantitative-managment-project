@@ -1,3 +1,8 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["OPENBLAS_NUM_THREADS"] = "4"
+os.environ["MKL_NUM_THREADS"] = "4"
+
 # Importing libraries, a bunch will be useless for now, just used these before
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +12,7 @@ import scipy.stats as stats
 from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
 from statsmodels.stats.stattools import durbin_watson, jarque_bera
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -123,7 +129,7 @@ pre = ColumnTransformer(
 )
 rf = Pipeline([
     ('pre', pre),
-    ('model', RandomForestRegressor(n_estimators=300, n_jobs=-1, random_state=42)),
+    ('model', RandomForestRegressor(n_estimators=300, n_jobs=4, random_state=42)),
 ])
 rf.fit(train[features], train[target])
 
@@ -134,3 +140,35 @@ rf_train = evaluate(train[target], rf.predict(train[features]), k_rf)
 print(f"k (encoded features) = {k_rf}")
 print("Test: ", {m: round(v, 4) for m, v in rf_test.items()})
 print("Train:", {m: round(v, 4) for m, v in rf_train.items()})
+
+print("", flush=True)
+
+bs_numeric = list(numeric)
+bs_categorical = list(categorical)
+
+# 1. Backward elimination on the TRAINING set only
+bs_model, kept = elimination(train, bs_categorical, bs_numeric)
+print("Kept:", kept)
+
+# 2. Predict the same test rows
+bs_pred = bs_model.predict(test)
+k_bs = int(bs_model.df_model)                        # columns the model uses (incl. dummies)
+bs_test = evaluate(test['Profit'], bs_pred, k_bs)
+
+# 3. Random Forest (all 15 raw predictors, no engineered terms)
+rf_pred = rf.predict(test[features])
+k_rf = rf.named_steps['pre'].transform(test[features]).shape[1]
+rf_test = evaluate(test['Profit'], rf_pred, k_rf)
+
+# 4. Comparison table
+comparison = pd.DataFrame({
+    'Backstep Regression': {'Predictors (k)': k_bs, **bs_test},
+    'Random Forest':       {'Predictors (k)': k_rf, **rf_test},
+}).T
+comparison['Predictors (k)'] = comparison['Predictors (k)'].astype(int)
+print(comparison.round(4))
+
+# 5. Is the added complexity worth it?
+d_adj = rf_test['Adj R²'] - bs_test['Adj R²']
+d_rmse = 1 - rf_test['RMSE'] / bs_test['RMSE']
+print(f"\nAdj R² gain: {d_adj:+.4f}  |  RMSE reduction: {d_rmse:.1%}")
